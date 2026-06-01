@@ -1,0 +1,64 @@
+steps:
+  - label: "Build and Release LineageOS 16.0 (lt01wifi)"
+    command:
+      # 1. Update system and install packages
+      - "echo '--- Installing system dependencies'"
+      - "sudo apt-get update"
+      - "sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf libxml2 lzop pngcrush rsync zip zlib1g-dev libncurses5 curl"
+      - "sudo apt-get install -y openjdk-8-jdk"
+      
+      # 2. Install GitHub CLI (gh) dynamically
+      - (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
+	    - && sudo mkdir -p -m 755 /etc/apt/keyrings && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+	    - cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+      - sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+	    - sudo mkdir -p -m 755 /etc/apt/sources.list.d \
+	    - echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+      - sudo apt update \
+	&&  - sudo apt install gh -y
+
+      # 3. Configure Repo and Git
+      - "echo '--- Configuring Repo Tool'"
+      - "mkdir -p ~/bin"
+      - "curl https://googleapis.com > ~/bin/repo"
+      - "chmod a+x ~/bin/repo"
+      - "export PATH=~/bin:$PATH"
+      - "git config --global user.name 'sweetkitten0424'"
+      - "git config --global user.email 'lukestot0103@gmail.com'"
+      
+      # 4. Initialize and Sync
+      - "echo '--- Initializing LineageOS Source'"
+      - "repo init -u https://github.com/LineageOS/android.git -b lineage-16.0 --git-lfs"
+      - "echo '--- Injecting Local Manifests'"
+      - "mkdir -p .repo/local_manifests"
+      - "cp .buildkite/local_manifests/lt01wifi.xml .repo/local_manifests/"
+      - "echo '--- Syncing Repositories'"
+      - "repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags"
+      
+      # 5. Compile the ROM
+      - "echo '--- Compiling ROM'"
+      - "source build/envsetup.sh"
+      - "export USE_CCACHE=1"
+      - "ccache -M 50G"
+      - "brunch lt01wifi"
+
+      # 6. Locate ZIP and Handle Dynamic Versioning
+      - "echo '--- Determining Release Version'"
+      - "ZIP_PATH=$(ls out/target/product/lt01wifi/lineage-16.0-*-UNOFFICIAL-lt01wifi.zip | head -n 1)"
+      - |
+        LATEST_TAG=$(gh release list --repo "$BUILDKITE_REPO" --limit 1 | awk '{print $1}')
+        if [ -z "$LATEST_TAG" ]; then
+          NEXT_VER="1.0"
+        else
+          VERSION_NUM=$(echo "$LATEST_TAG" | sed 's/lineage-16.0-lt01wifi-//')
+          NEXT_VER=$(echo "$VERSION_NUM + 0.1" | bc)
+        fi
+        TAG_NAME="lineage-16.0-lt01wifi-$NEXT_VER"
+        echo "Next release version will be: $TAG_NAME"
+      
+      # 7. Create GitHub Release and Upload flashable ZIP
+      - "echo '--- Creating GitHub Release'"
+      - "gh release create \"$TAG_NAME\" \"$ZIP_PATH\" --repo \"$BUILDKITE_REPO\" --title \"$TAG_NAME\" --notes \"Automated Buildkite release for lt01wifi\""
+
+    agents:
+      queue: "lineage-build-queue"

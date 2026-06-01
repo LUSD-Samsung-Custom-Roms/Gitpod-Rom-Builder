@@ -1,10 +1,5 @@
 steps:
   - label: "Cloud Build & Release LineageOS 16.0 (lt01wifi)"
-    plugins:
-      # Automatically requests a large 250GB SSD volume for this specific run
-      - hosted-agent-disk#v1.0.0:
-          size: 250
-
     command:
       # 1. Install necessary dependencies on the fresh cloud instance
       - "echo '--- Installing system dependencies'"
@@ -22,8 +17,8 @@ steps:
       - "curl https://storage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo"
       - "chmod a+x ~/.bin/repo"
       - "export PATH=~/.bin:$PATH"
-      - "git config --global user.name 'Your Name'"
-      - "git config --global user.email 'you@example.com'"
+      - "git config --global user.name 'sweetkitten0424'"
+      - "git config --global user.email 'lukestot0103@gmail.com'"
       
       # 4. Initialize and Sync Source
       - "echo '--- Initializing LineageOS Source'"
@@ -44,7 +39,7 @@ steps:
       - "ZIP_PATH=$(ls out/target/product/lt01wifi/lineage-16.0-*-UNOFFICIAL-lt01wifi.zip | head -n 1)"
       - |
         # Explicitly targets your Gitpod-Rom-Builder repository
-        LATEST_TAG=$(gh release list --repo "${BUILDKITE_ORGANIZATION}/Gitpod-Rom-Builder" --limit 1 | awk '{print $1}')
+        LATEST_TAG=$(gh release list --repo "LUSD-Samsung-Custom-Roms/Gitpod-Rom-Builder" --limit 1 | awk '{print $$1}')
         if [ -z "$LATEST_TAG" ]; then
           NEXT_VER="1.0"
         else
@@ -56,8 +51,8 @@ steps:
       
       # 7. Push flashable ZIP to GitHub Releases
       - "echo '--- Creating GitHub Release'"
-      - "gh release create \"$TAG_NAME\" \"$ZIP_PATH\" --repo \"${BUILDKITE_ORGANIZATION}/Gitpod-Rom-Builder\" --title \"$TAG_NAME\" --notes \"Automated Cloud Buildkite release for lt01wifi\""
+      - "gh release create \"$TAG_NAME\" \"$ZIP_PATH\" --repo \"LUSD-Samsung-Custom-Roms/Gitpod-Rom-Builder\" --title \"$TAG_NAME\" --notes \"Automated Cloud Buildkite release for lt01wifi\""
 
     # Route execution to Buildkite's cloud-hosted infrastructure
     agents:
-      queue: "hosted:ubuntu-22.04:xlarge"
+      queue: "lineage-build-queue1"

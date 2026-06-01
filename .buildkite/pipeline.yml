@@ -1,32 +1,31 @@
 steps:
-  - label: "Build and Release LineageOS 16.0 (lt01wifi)"
+  - label: "Cloud Build & Release LineageOS 16.0 (lt01wifi)"
+    plugins:
+      # Automatically requests a large 250GB SSD volume for this specific run
+      - hosted-agent-disk#v1.0.0:
+          size: 250
+
     command:
-      # 1. Update system and install packages
+      # 1. Install necessary dependencies on the fresh cloud instance
       - "echo '--- Installing system dependencies'"
       - "sudo apt-get update"
       - "sudo apt-get install -y bc bison build-essential ccache flex g++-multilib gcc-multilib git gnupg gperf libxml2 lzop pngcrush rsync zip zlib1g-dev libncurses5 curl"
       - "sudo apt-get install -y openjdk-8-jdk"
       
-      # 2. Install GitHub CLI (gh) dynamically
-      - (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
-	    - && sudo mkdir -p -m 755 /etc/apt/keyrings && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-	    - cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
-      - sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
-	    - sudo mkdir -p -m 755 /etc/apt/sources.list.d \
-	    - echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
-      - sudo apt update \
-	&&  - sudo apt install gh -y
+      # 2. Corrected GitHub CLI (gh) installation via wget and mktemp
+      - "echo '--- Installing GitHub CLI'"
+      - "(type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) && sudo mkdir -p -m 755 /etc/apt/keyrings && out=$(mktemp) && wget -nv -O$out https://github.com && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg && sudo mkdir -p -m 755 /etc/apt/sources.list.d && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://github.com stable main\" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null && sudo apt update && sudo apt install gh -y"
 
-      # 3. Configure Repo and Git
+      # 3. Configure Repo Environment
       - "echo '--- Configuring Repo Tool'"
       - "mkdir -p ~/bin"
-      - "curl https://googleapis.com > ~/bin/repo"
-      - "chmod a+x ~/bin/repo"
-      - "export PATH=~/bin:$PATH"
-      - "git config --global user.name 'sweetkitten0424'"
-      - "git config --global user.email 'lukestot0103@gmail.com'"
+      - "curl https://storage.googleapis.com/git-repo-downloads/repo > ~/.bin/repo"
+      - "chmod a+x ~/.bin/repo"
+      - "export PATH=~/.bin:$PATH"
+      - "git config --global user.name 'Your Name'"
+      - "git config --global user.email 'you@example.com'"
       
-      # 4. Initialize and Sync
+      # 4. Initialize and Sync Source
       - "echo '--- Initializing LineageOS Source'"
       - "repo init -u https://github.com/LineageOS/android.git -b lineage-16.0 --git-lfs"
       - "echo '--- Injecting Local Manifests'"
@@ -38,15 +37,14 @@ steps:
       # 5. Compile the ROM
       - "echo '--- Compiling ROM'"
       - "source build/envsetup.sh"
-      - "export USE_CCACHE=1"
-      - "ccache -M 50G"
       - "brunch lt01wifi"
 
-      # 6. Locate ZIP and Handle Dynamic Versioning
+      # 6. Generate Dynamic Versioning from existing GitHub Releases
       - "echo '--- Determining Release Version'"
       - "ZIP_PATH=$(ls out/target/product/lt01wifi/lineage-16.0-*-UNOFFICIAL-lt01wifi.zip | head -n 1)"
       - |
-        LATEST_TAG=$(gh release list --repo "$BUILDKITE_REPO" --limit 1 | awk '{print $1}')
+        # Explicitly targets your Gitpod-Rom-Builder repository
+        LATEST_TAG=$(gh release list --repo "${BUILDKITE_ORGANIZATION}/Gitpod-Rom-Builder" --limit 1 | awk '{print $1}')
         if [ -z "$LATEST_TAG" ]; then
           NEXT_VER="1.0"
         else
@@ -56,9 +54,10 @@ steps:
         TAG_NAME="lineage-16.0-lt01wifi-$NEXT_VER"
         echo "Next release version will be: $TAG_NAME"
       
-      # 7. Create GitHub Release and Upload flashable ZIP
+      # 7. Push flashable ZIP to GitHub Releases
       - "echo '--- Creating GitHub Release'"
-      - "gh release create \"$TAG_NAME\" \"$ZIP_PATH\" --repo \"$BUILDKITE_REPO\" --title \"$TAG_NAME\" --notes \"Automated Buildkite release for lt01wifi\""
+      - "gh release create \"$TAG_NAME\" \"$ZIP_PATH\" --repo \"${BUILDKITE_ORGANIZATION}/Gitpod-Rom-Builder\" --title \"$TAG_NAME\" --notes \"Automated Cloud Buildkite release for lt01wifi\""
 
+    # Route execution to Buildkite's cloud-hosted infrastructure
     agents:
-      queue: "lineage-build-queue"
+      queue: "hosted:ubuntu-22.04:xlarge"
